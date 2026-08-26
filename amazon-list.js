@@ -306,6 +306,43 @@ function importMessages(messages) {
   return { added: added, occurrences: occurrences };
 }
 
+// shared-list.js の共有リストを取り込む
+function importSharedList() {
+  var data = window.SHARED_LIST;
+  var result = { added: 0, occurrences: 0, storeMarks: 0 };
+  if (!data || !data.items) return result;
+
+  data.items.forEach(function (entry) {
+    if (!entry.asin) return;
+    var msg = {
+      at: entry.sharedAt || '',
+      sharer: entry.sharer || 'グループ共有',
+      text: entry.name || entry.asin
+    };
+    var r = upsert(entry.asin, entry.asin, canonicalUrl(entry.asin, ''), msg, entry.name);
+    if (r.added) result.added++;
+    if (r.counted) result.occurrences++;
+
+    var item = r.item;
+    if (entry.name && !item.name) item.name = entry.name;
+    if (entry.jan && !item.jan) item.jan = entry.jan;
+    if (entry.memo && !item.memo) item.memo = entry.memo;
+
+    (entry.stores || []).forEach(function (s) {
+      if (!s.id) return;
+      var e = storeEntry(item, s.id);
+      // 自分で確認済みの店舗は共有情報で上書きしない
+      if (e.state !== '未確認') return;
+      e.state = s.state || 'あり';
+      if (!e.memo) e.memo = s.memo || '';
+      if (e.price === '' && s.price) e.price = toNumber(s.price);
+      result.storeMarks++;
+    });
+  });
+
+  return result;
+}
+
 function importText(text) {
   var messages = parseMessages(text);
   // 日時付きの行が無い貼り付け（メモ書きなど）でもリンク・ASINは拾う
@@ -738,9 +775,14 @@ function exportCsv() {
 /* ---------------- イベント ---------------- */
 
 function reportImport(result) {
-  $('importResult').textContent = result.occurrences === 0
-    ? 'ASIN／Amazonリンクが見つかりませんでした。'
-    : '新規 ' + result.added + '件 / 共有 ' + result.occurrences + '件を取り込みました。';
+  var msg;
+  if (result.occurrences === 0 && !result.storeMarks) {
+    msg = 'ASIN／Amazonリンクが見つかりませんでした。';
+  } else {
+    msg = '新規 ' + result.added + '件 / 共有 ' + result.occurrences + '件を取り込みました。';
+    if (result.storeMarks) msg += ' 店舗情報 ' + result.storeMarks + '件を反映しました。';
+  }
+  $('importResult').textContent = msg;
   save();
   render();
 }
@@ -799,6 +841,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     reportImport(importAsinList(text, $('asinSharer').value.trim() || '共有'));
     $('asinArea').value = '';
+  });
+
+  if (window.SHARED_LIST && window.SHARED_LIST.items) {
+    $('sharedListInfo').textContent = window.SHARED_LIST.items.length + '件（更新 '
+      + (window.SHARED_LIST.updated || '不明') + '）';
+  } else {
+    $('sharedListBtn').disabled = true;
+    $('sharedListInfo').textContent = 'shared-list.js を読み込めませんでした';
+  }
+
+  $('sharedListBtn').addEventListener('click', function () {
+    var result = importSharedList();
+    if (!result.added && !result.occurrences && !result.storeMarks) {
+      $('importResult').textContent = '共有リストはすでに取り込み済みです。';
+      return;
+    }
+    reportImport(result);
   });
 
   $('importBtn').addEventListener('click', function () {

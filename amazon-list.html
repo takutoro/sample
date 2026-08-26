@@ -29,6 +29,12 @@
           <button id="asinImportBtn" class="btn btn-primary">取り込む</button>
           <span id="importResult" class="muted"></span>
         </div>
+        <hr>
+        <div class="row">
+          <button id="sharedListBtn" class="btn btn-outline">共有リストを読み込む</button>
+          <span id="sharedListInfo" class="muted"></span>
+        </div>
+        <p class="muted">グループで共有された商品と、共有された店舗情報（<code>shared-list.js</code>）をまとめて取り込みます。自分で店頭確認した記録は上書きしません。</p>
       </div>
 
       <div class="tab-body" data-body="line" hidden>
@@ -139,6 +145,7 @@
     </div>
   </footer>
 
+  <script src="shared-list.js"></script>
   <script src="amazon-list.js"></script>
 </body>
 </html>
