@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon物販 商品リスト | LINE共有まとめ</title>
+  <link rel="stylesheet" type="text/css" href="amazon-list.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="wrap">
+      <h1>Amazon物販 商品リスト</h1>
+      <p>LINEグループで共有されたAmazon商品リンクを自動で抽出し、重複をまとめて一覧化します。データはブラウザ内（localStorage）にのみ保存され、外部には送信されません。</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel">
+      <h2>1. トーク履歴を取り込む</h2>
+      <div id="dropzone" class="dropzone">
+        <p><strong>.txt ファイルをドラッグ＆ドロップ</strong></p>
+        <p class="muted">または</p>
+        <label class="btn btn-outline">
+          ファイルを選択
+          <input type="file" id="fileInput" accept=".txt,text/plain" multiple hidden>
+        </label>
+      </div>
+
+      <details class="help">
+        <summary>LINEトーク履歴の出し方</summary>
+        <ol>
+          <li>グループトークを開く → 右上の「≡」メニュー</li>
+          <li>「その他」→「トーク履歴を送信」（Android は「トーク履歴を送信」／iPhone は「トーク履歴を送信」）</li>
+          <li>テキストファイル（.txt）を自分宛にメール送信・保存</li>
+          <li>その .txt をここに読み込ませる</li>
+        </ol>
+        <p class="muted">※ 履歴を貼り付けるだけでもOKです。日付・時刻が無い文章でもAmazonリンクだけは抽出します。</p>
+      </details>
+
+      <label class="field-label" for="pasteArea">テキストを貼り付けて取り込む</label>
+      <textarea id="pasteArea" rows="6" placeholder="2026/08/20(木)&#10;12:34&#9;たろう&#9;これ利益出そう https://www.amazon.co.jp/dp/B08XXXXXXX 仕入1200円 売値2980円"></textarea>
+      <div class="row">
+        <button id="importBtn" class="btn btn-primary">取り込む</button>
+        <span id="importResult" class="muted"></span>
+      </div>
+
+      <hr>
+
+      <h3>URLを手動で追加</h3>
+      <div class="row">
+        <input type="url" id="manualUrl" placeholder="https://www.amazon.co.jp/dp/B08XXXXXXX">
+        <input type="text" id="manualSharer" placeholder="共有者（任意）">
+        <button id="manualAddBtn" class="btn btn-outline">追加</button>
+      </div>
+    </section>
+
+    <section class="stats" id="stats"></section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <input type="search" id="searchInput" placeholder="商品名・ASIN・共有者・メモで検索">
+        <select id="statusFilter">
+          <option value="">すべてのステータス</option>
+        </select>
+        <select id="sharerFilter">
+          <option value="">すべての共有者</option>
+        </select>
+        <select id="sortSelect">
+          <option value="firstAt-desc">共有日が新しい順</option>
+          <option value="firstAt-asc">共有日が古い順</option>
+          <option value="count-desc">共有回数が多い順</option>
+          <option value="profit-desc">想定利益が高い順</option>
+          <option value="name-asc">商品名順</option>
+        </select>
+        <label class="fee-field">
+          手数料率
+          <input type="number" id="feeRate" min="0" max="100" step="0.5" value="15">%
+        </label>
+        <span class="spacer"></span>
+        <button id="csvBtn" class="btn btn-outline">CSV出力</button>
+        <button id="clearBtn" class="btn btn-danger">全削除</button>
+      </div>
+
+      <div class="table-scroll">
+        <table id="productTable">
+          <thead>
+            <tr>
+              <th class="col-name">商品名 / リンク</th>
+              <th class="col-asin">ASIN</th>
+              <th class="col-sharer">共有者</th>
+              <th class="col-date">初回共有</th>
+              <th class="col-count">回数</th>
+              <th class="col-money">仕入値</th>
+              <th class="col-money">売値</th>
+              <th class="col-profit">想定利益</th>
+              <th class="col-status">ステータス</th>
+              <th class="col-memo">メモ</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <p id="emptyState" class="empty">まだ商品がありません。上のフォームからトーク履歴を取り込んでください。</p>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="wrap">
+      <p class="muted">想定利益 = 売値 × (1 − 手数料率) − 仕入値。FBA配送料・送料は含みません。</p>
+    </div>
+  </footer>
+
+  <script src="amazon-list.js"></script>
+</body>
+</html>
