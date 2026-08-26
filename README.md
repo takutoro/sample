@@ -48,7 +48,12 @@ LINEグループで共有されたASIN／Amazonリンクをリスト化し、**�
   name: '...',
   jan: '',
   memo: '...',
-  stores: [{ id: 'yamada-suzuka', state: 'あり', memo: 'グループ共有：ヤマダ電機にあった' }]
+  stores: [
+    // 実際に在庫が確認された店舗
+    { id: 'yamada-suzuka', state: 'あり', memo: 'グループ共有：ヤマダ電機にあった' },
+    // カテゴリから見て優先して回るべき店舗（在庫の主張はしない）
+    { id: 'aeonmall-suzuka', state: '未確認', memo: '★優先：玩具売場' }
+  ]
 }
 ```
 

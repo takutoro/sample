@@ -333,10 +333,11 @@ function importSharedList() {
       var e = storeEntry(item, s.id);
       // 自分で確認済みの店舗は共有情報で上書きしない
       if (e.state !== '未確認') return;
-      e.state = s.state || 'あり';
-      if (!e.memo) e.memo = s.memo || '';
-      if (e.price === '' && s.price) e.price = toNumber(s.price);
-      result.storeMarks++;
+      var changed = false;
+      if (s.state && s.state !== e.state) { e.state = s.state; changed = true; }
+      if (s.memo && !e.memo) { e.memo = s.memo; changed = true; }
+      if (s.price && e.price === '') { e.price = toNumber(s.price); changed = true; }
+      if (changed) result.storeMarks++;
     });
   });
 
