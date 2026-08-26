@@ -198,7 +198,7 @@ hr {
 
 table {
   width: 100%;
-  min-width: 1050px;
+  min-width: 1180px;
   border-collapse: collapse;
 }
 
@@ -282,4 +282,182 @@ td input[type="number"] { text-align: right; }
 @media (max-width: 640px) {
   .app-header h1 { font-size: 18px; }
   .panel { padding: 14px; }
+}
+
+/* ---- タブ / ビュー切替 ---- */
+
+.tabs, .view-switch {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.view-switch { margin-bottom: 0; }
+
+.tab {
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background-color: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab.is-active {
+  background-color: #232f3e;
+  border-color: #232f3e;
+  color: #fff;
+  font-weight: bold;
+}
+
+.area-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background-color: var(--accent);
+  color: #232f3e;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+code {
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  background-color: rgba(127, 127, 127, 0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* ---- 店舗列 / 詳細行 ---- */
+
+.col-store { width: 108px; white-space: nowrap; }
+
+.store-summary { margin-top: 4px; }
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background-color: rgba(127, 127, 127, 0.15);
+  color: var(--muted);
+}
+
+.badge-yes {
+  background-color: rgba(26, 121, 64, 0.15);
+  color: var(--profit);
+  font-weight: bold;
+}
+
+.detail-row > td {
+  background-color: rgba(127, 127, 127, 0.06);
+  padding: 16px;
+}
+
+.detail {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) 1fr;
+  gap: 20px;
+}
+
+.detail-block h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.research-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.research-link {
+  color: var(--link);
+  font-size: 13px;
+}
+
+.hint {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.store-list {
+  display: grid;
+  gap: 6px;
+}
+
+.store-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) 92px 110px minmax(120px, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.store-row .store-name { font-size: 13px; }
+.store-row .store-name a { color: var(--link); }
+
+.store-row select.state-yes { border-color: var(--profit); color: var(--profit); font-weight: bold; }
+.store-row select.state-no { color: var(--muted); }
+
+/* ---- 店舗別ビュー ---- */
+
+.store-block { margin-bottom: 24px; }
+
+.store-block h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.store-block h3 a { color: var(--text); }
+
+.store-table { min-width: 640px; }
+
+.store-table th, .store-table td { font-size: 13px; }
+
+/* ---- 店舗マスタ ---- */
+
+#storeMaster summary { cursor: pointer; }
+
+.store-master-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 6px;
+}
+
+.store-master-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.store-master-list li a { color: var(--link); }
+.store-master-list li .hint { grid-column: 1 / -1; }
+
+.tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background-color: rgba(127, 127, 127, 0.15);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .detail { grid-template-columns: 1fr; }
+  .store-row { grid-template-columns: 1fr 1fr; }
+  .store-row .store-name { grid-column: 1 / -1; }
 }

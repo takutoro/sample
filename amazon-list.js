@@ -1,22 +1,51 @@
 'use strict';
 
 /* ------------------------------------------------------------------
- * LINEのトーク履歴からAmazon商品を抽出して一覧化する
- * データはすべてブラウザのlocalStorageに保存する（外部送信なし）
+ * 共有されたASIN／Amazonリンクを商品リスト化し、
+ * 鈴鹿市周辺の店舗ごとに在庫有無と店頭価格を記録する。
+ * データはすべてlocalStorageに保存する（外部送信なし）。
  * ------------------------------------------------------------------ */
 
 var STORAGE_KEY = 'amazonProductList.v1';
 var SETTING_KEY = 'amazonProductList.settings.v1';
+var STORE_KEY = 'amazonProductList.stores.v1';
+
 var STATUSES = ['未確認', '検討中', '仕入済', '出品済', '見送り'];
+var STOCK_STATES = ['未確認', 'あり', 'なし'];
+
+/* 鈴鹿市周辺の店舗（公開情報を元にした初期値。ユーザーが編集・追加できる） */
+var DEFAULT_STORES = [
+  { id: 'donki-suzuka', name: 'ドン・キホーテ 鈴鹿店', address: '鈴鹿市磯山4-6-18', note: '9:00-翌3:00' },
+  { id: 'mega-donki-uny', name: 'MEGAドン・キホーテUNY 鈴鹿店', address: '鈴鹿市南玉垣町3628', note: '8:00-24:00' },
+  { id: 'yamada-suzuka', name: 'ヤマダデンキ テックランド鈴鹿店', address: '鈴鹿市北玉垣町中野787', note: '家電' },
+  { id: 'ks-suzuka', name: 'ケーズデンキ 鈴鹿店', address: '鈴鹿市算所町山之相419-1', note: '家電' },
+  { id: 'edion-aeonmall', name: 'エディオン イオンモール鈴鹿店', address: '鈴鹿市庄野羽山4-1-2 ウエスト2F', note: '家電' },
+  { id: 'kohnan-aeontown', name: 'コーナン イオンタウン鈴鹿店', address: '鈴鹿市庄野羽山4-20-1', note: 'ホームセンター' },
+  { id: 'vivahome-suzuka', name: 'スーパービバホーム 鈴鹿店', address: '鈴鹿市住吉町8910', note: 'ホームセンター' },
+  { id: 'dcm-suzuka', name: 'DCM 鈴鹿店', address: '鈴鹿市北玉垣町中野784', note: 'ホームセンター' },
+  { id: 'aeonmall-suzuka', name: 'イオンモール鈴鹿', address: '鈴鹿市庄野羽山4-1-2', note: 'モール' },
+  { id: 'aeon-suzuka', name: 'イオン鈴鹿店', address: '', note: '総合スーパー' },
+  { id: 'suzuka-hunter', name: '鈴鹿ハンターショッピングセンター', address: '鈴鹿市算所2-5-1', note: 'モール' },
+  { id: 'bookoff-hunter', name: 'BOOKOFF 鈴鹿ハンター店', address: '鈴鹿市算所2-5-1 2F', note: 'リユース' },
+  { id: 'hardoff-circuit', name: 'ハードオフ・オフハウス 鈴鹿サーキット通り店', address: '鈴鹿市稲生', note: 'リユース' },
+  { id: 'geo-saijo', name: 'ゲオ 鈴鹿西条店', address: '', note: 'ゲーム・リユース' },
+  { id: 'secondstreet-saijo', name: 'セカンドストリート 鈴鹿西条店', address: '', note: 'リユース' },
+  { id: 'birthday-tamagaki', name: 'バースデイ イオンタウン鈴鹿玉垣店', address: '鈴鹿市南玉垣町5520-106', note: 'ベビー・子供用品' },
+  { id: 'daiso-mega-donki', name: 'ダイソー MEGAドン・キホーテUNY鈴鹿店', address: '鈴鹿市南玉垣町3628', note: '100均' }
+];
 
 var AMAZON_HOST = /(^|\.)(amazon\.(co\.jp|com|co\.uk|de|fr|it|es|ca|com\.mx|com\.au|in|nl|se|pl|com\.tr|sg|ae|sa|com\.br)|amzn\.asia|amzn\.to|a\.co)$/i;
 var ASIN_PATTERNS = [
   /\/(?:dp|gp\/product|gp\/aw\/d|ASIN|product|gp\/offer-listing)\/([A-Z0-9]{10})(?![A-Z0-9])/i,
   /[?&](?:asin|ASIN)=([A-Z0-9]{10})(?![A-Z0-9])/
 ];
+var BARE_ASIN = /(?:^|[^0-9A-Za-z])(B0[0-9A-Z]{8})(?![0-9A-Za-z])/g;
+var URL_RE = /https?:\/\/[^\s"'<>「」『』（）()【】、,]+/g;
 
 var products = load(STORAGE_KEY, {});
 var settings = load(SETTING_KEY, { feeRate: 15 });
+var stores = load(STORE_KEY, null) || DEFAULT_STORES.slice();
+var currentView = 'product';
 
 /* ---------------- ストレージ ---------------- */
 
@@ -33,20 +62,25 @@ function save() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
     localStorage.setItem(SETTING_KEY, JSON.stringify(settings));
+    localStorage.setItem(STORE_KEY, JSON.stringify(stores));
   } catch (e) {
     alert('保存に失敗しました。ブラウザの保存容量が上限に達している可能性があります。');
   }
 }
 
-/* ---------------- パース ---------------- */
+/* ---------------- LINEトーク履歴のパース ---------------- */
 
-// LINEエクスポート形式（Android: 2024/01/15(月) / iPhone: 2024.01.15 月曜日）
 var DATE_LINE = /^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?:\s*[(（].{1,3}[)）]|\s+.{1,4}曜日)?\s*$/;
 var MSG_TAB = /^(?:(午前|午後)\s*)?(\d{1,2}):(\d{2})\t([^\t]*)\t([\s\S]*)$/;
 var MSG_SPACE = /^(?:(午前|午後)\s*)?(\d{1,2}):(\d{2})[ 　]+(\S+)[ 　]+([\s\S]*)$/;
-var URL_RE = /https?:\/\/[^\s"'<>「」『』（）()【】、,]+/g;
 
 function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+function nowStamp() {
+  var d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+    + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
 
 function toTimestamp(date, ampm, hour, minute) {
   if (!date) return '';
@@ -56,7 +90,6 @@ function toTimestamp(date, ampm, hour, minute) {
   return date + ' ' + pad(h) + ':' + minute;
 }
 
-// テキストからLINEメッセージの配列を作る
 function parseMessages(text) {
   var lines = text.replace(/\r\n?/g, '\n').split('\n');
   var messages = [];
@@ -79,11 +112,7 @@ function parseMessages(text) {
     var m = line.match(MSG_TAB) || (line.indexOf('\t') === -1 ? line.match(MSG_SPACE) : null);
     if (m) {
       flush();
-      current = {
-        at: toTimestamp(date, m[1], m[2], m[3]),
-        sharer: (m[4] || '').trim() || '不明',
-        text: m[5]
-      };
+      current = { at: toTimestamp(date, m[1], m[2], m[3]), sharer: (m[4] || '').trim() || '不明', text: m[5] };
       continue;
     }
     if (current) current.text += '\n' + line;
@@ -92,9 +121,9 @@ function parseMessages(text) {
   return messages;
 }
 
-function normalizeUrl(url) {
-  return url.replace(/[).,、。]+$/, '');
-}
+/* ---------------- URL / ASIN ---------------- */
+
+function normalizeUrl(url) { return url.replace(/[).,、。]+$/, ''); }
 
 function extractAsin(url) {
   for (var i = 0; i < ASIN_PATTERNS.length; i++) {
@@ -125,14 +154,12 @@ function keyOf(asin, url) {
 
 function canonicalUrl(asin, url) {
   if (!asin) return url;
+  var host = 'www.amazon.co.jp';
   try {
-    var host = new URL(url).hostname.replace(/^www\./, '');
-    if (/^amzn\.|^a\.co$/.test(host)) host = 'www.amazon.co.jp';
-    else host = 'www.' + host;
-    return 'https://' + host + '/dp/' + asin;
-  } catch (e) {
-    return 'https://www.amazon.co.jp/dp/' + asin;
-  }
+    var h = new URL(url).hostname.replace(/^www\./, '');
+    if (!/^amzn\.|^a\.co$/.test(h)) host = 'www.' + h;
+  } catch (e) { /* ASIN直接入力の場合はco.jpを使う */ }
+  return 'https://' + host + '/dp/' + asin;
 }
 
 function toNumber(str) {
@@ -140,10 +167,9 @@ function toNumber(str) {
   return isNaN(n) ? '' : n;
 }
 
-// 「仕入1200円」「売値2,980円」のようなラベル付き金額を拾う
 function extractPrices(text) {
   var result = { cost: '', price: '' };
-  var cost = text.match(/(?:仕入(?:れ|値|価格)?|原価|買値)\s*[:：=]?\s*[¥￥]?\s*([\d,，]+)\s*円?/);
+  var cost = text.match(/(?:仕入(?:れ|値|価格)?|原価|買値|店頭)\s*[:：=]?\s*[¥￥]?\s*([\d,，]+)\s*円?/);
   var price = text.match(/(?:売値|売価|販売(?:価格)?|出品(?:価格)?|Amazon価格|amazon価格)\s*[:：=]?\s*[¥￥]?\s*([\d,，]+)\s*円?/);
   if (cost) result.cost = toNumber(cost[1]);
   if (price) result.price = toNumber(price[1]);
@@ -154,58 +180,86 @@ function extractPrices(text) {
   return result;
 }
 
-// URLとその周辺の記号を除いた本文を商品名の初期値にする
-function guessName(text, url) {
-  var cleaned = text.split(url).join(' ').replace(URL_RE, ' ').replace(/\s+/g, ' ').trim();
+function guessName(text, token) {
+  var cleaned = text.split(token).join(' ').replace(URL_RE, ' ').replace(BARE_ASIN, ' ')
+    .replace(/\s+/g, ' ').trim();
+  URL_RE.lastIndex = 0;
+  BARE_ASIN.lastIndex = 0;
   if (!cleaned) return '';
   return cleaned.length > 60 ? cleaned.slice(0, 60) + '…' : cleaned;
 }
 
-// メッセージ配列から商品を取り込む（同一の共有は何度読み込んでも重複しない）
+/* ---------------- 取り込み ---------------- */
+
+function addOccurrence(item, msg) {
+  var stamp = msg.at + '|' + msg.sharer;
+  var dup = item.occurrences.some(function (o) { return o.at + '|' + o.sharer === stamp; });
+  if (dup) return false;
+  item.occurrences.push({
+    at: msg.at,
+    sharer: msg.sharer,
+    text: msg.text.length > 200 ? msg.text.slice(0, 200) + '…' : msg.text
+  });
+  return true;
+}
+
+function upsert(key, asin, url, msg, nameOverride) {
+  var item = products[key];
+  var added = false;
+  if (!item) {
+    var prices = extractPrices(msg.text);
+    item = products[key] = {
+      key: key,
+      asin: asin,
+      url: url,
+      name: nameOverride || guessName(msg.text, asin || url),
+      cost: prices.cost,
+      price: prices.price,
+      status: STATUSES[0],
+      memo: '',
+      stores: {},
+      occurrences: []
+    };
+    added = true;
+  }
+  if (!item.asin && asin) {
+    item.asin = asin;
+    item.url = canonicalUrl(asin, item.url);
+  }
+  if (!item.name && nameOverride) item.name = nameOverride;
+  return { item: item, added: added, counted: addOccurrence(item, msg) };
+}
+
+// メッセージ配列から商品を取り込む（同じ内容を再取り込みしても重複しない）
 function importMessages(messages) {
   var added = 0;
   var occurrences = 0;
 
   messages.forEach(function (msg) {
-    var urls = (msg.text.match(URL_RE) || []).map(normalizeUrl).filter(isAmazonUrl);
     var seen = {};
-    urls.forEach(function (url) {
+
+    (msg.text.match(URL_RE) || []).map(normalizeUrl).filter(isAmazonUrl).forEach(function (url) {
       var asin = extractAsin(url);
       var key = keyOf(asin, url);
       if (seen[key]) return;
       seen[key] = true;
-
-      var item = products[key];
-      if (!item) {
-        var prices = extractPrices(msg.text);
-        item = products[key] = {
-          key: key,
-          asin: asin,
-          url: canonicalUrl(asin, url),
-          name: guessName(msg.text, url),
-          cost: prices.cost,
-          price: prices.price,
-          status: STATUSES[0],
-          memo: '',
-          occurrences: []
-        };
-        added++;
-      }
-      if (!item.asin && asin) {
-        item.asin = asin;
-        item.url = canonicalUrl(asin, url);
-      }
-      var stamp = msg.at + '|' + msg.sharer;
-      var dup = item.occurrences.some(function (o) { return o.at + '|' + o.sharer === stamp; });
-      if (!dup) {
-        item.occurrences.push({
-          at: msg.at,
-          sharer: msg.sharer,
-          text: msg.text.length > 200 ? msg.text.slice(0, 200) + '…' : msg.text
-        });
-        occurrences++;
-      }
+      var r = upsert(key, asin, canonicalUrl(asin, url), msg, msg.name);
+      if (r.added) added++;
+      if (r.counted) occurrences++;
     });
+
+    // 本文中にASINが直接書かれているケース
+    var m;
+    BARE_ASIN.lastIndex = 0;
+    while ((m = BARE_ASIN.exec(msg.text)) !== null) {
+      var asin2 = m[1];
+      if (seen[asin2]) continue;
+      seen[asin2] = true;
+      var r2 = upsert(asin2, asin2, canonicalUrl(asin2, ''), msg, msg.name);
+      if (r2.added) added++;
+      if (r2.counted) occurrences++;
+    }
+    URL_RE.lastIndex = 0;
   });
 
   return { added: added, occurrences: occurrences };
@@ -213,10 +267,25 @@ function importMessages(messages) {
 
 function importText(text) {
   var messages = parseMessages(text);
-  // 日時付きの行が無い貼り付け（メモ書きなど）でもURLだけは拾う
-  if (messages.length === 0) {
-    messages = [{ at: '', sharer: '不明', text: text }];
-  }
+  // 日時付きの行が無い貼り付け（メモ書きなど）でもリンク・ASINは拾う
+  if (messages.length === 0) messages = [{ at: '', sharer: '不明', text: text }];
+  return importMessages(messages);
+}
+
+// 「B0XXXXXXXX 商品名」形式のASIN一覧を取り込む
+function importAsinList(text, sharer) {
+  var at = nowStamp();
+  var messages = [];
+  text.replace(/\r\n?/g, '\n').split('\n').forEach(function (line) {
+    var raw = line.trim();
+    if (!raw) return;
+    var m = raw.match(/^([0-9A-Za-z]{10})(?![0-9A-Za-z])[\s,、\t|]*(.*)$/);
+    if (m && !/^https?:/i.test(raw)) {
+      messages.push({ at: at, sharer: sharer, text: m[1].toUpperCase() + ' ' + m[2], name: m[2].trim() });
+    } else {
+      messages.push({ at: at, sharer: sharer, text: raw });
+    }
+  });
   return importMessages(messages);
 }
 
@@ -237,6 +306,35 @@ function sharersOf(item) {
   return list;
 }
 
+function storeEntry(item, storeId) {
+  if (!item.stores) item.stores = {};
+  if (!item.stores[storeId]) item.stores[storeId] = { state: '未確認', price: '', memo: '' };
+  return item.stores[storeId];
+}
+
+function foundStores(item) {
+  if (!item.stores) return [];
+  return stores.filter(function (s) {
+    return item.stores[s.id] && item.stores[s.id].state === 'あり';
+  });
+}
+
+function checkedCount(item) {
+  if (!item.stores) return 0;
+  return stores.filter(function (s) {
+    return item.stores[s.id] && item.stores[s.id].state !== '未確認';
+  }).length;
+}
+
+function bestStorePrice(item) {
+  var best = null;
+  foundStores(item).forEach(function (s) {
+    var p = toNumber(item.stores[s.id].price);
+    if (p !== '' && (best === null || p < best)) best = p;
+  });
+  return best;
+}
+
 function profitOf(item) {
   var price = toNumber(item.price);
   var cost = toNumber(item.cost);
@@ -252,12 +350,40 @@ function marginOf(item) {
   return Math.round((profit / price) * 1000) / 10;
 }
 
+/* ---------------- リサーチリンク ---------------- */
+
+function searchQuery(item) {
+  return item.name ? item.name.replace(/…$/, '') : item.asin;
+}
+
+function researchLinks(item) {
+  var q = encodeURIComponent(searchQuery(item));
+  var asin = item.asin;
+  var links = [
+    { label: 'Amazon商品ページ', url: item.url, hint: '仕様欄で型番・JANを確認' }
+  ];
+  if (asin) {
+    links.push({ label: '型番・JANを検索', url: 'https://www.google.com/search?q=' + encodeURIComponent(asin + ' JAN 型番'), hint: 'ASINから商品を特定' });
+    links.push({ label: 'Keepa（価格推移）', url: 'https://keepa.com/#!product/5-' + asin, hint: '相場と回転を確認' });
+  }
+  links.push({ label: '価格.com', url: 'https://kakaku.com/search_results/' + q + '/', hint: '実売価格の相場' });
+  links.push({ label: '楽天市場', url: 'https://search.rakuten.co.jp/search/mall/' + q + '/', hint: '' });
+  links.push({ label: 'Yahoo!ショッピング', url: 'https://shopping.yahoo.co.jp/search?p=' + q, hint: '' });
+  links.push({ label: 'メルカリ（売切れ）', url: 'https://jp.mercari.com/search?keyword=' + q + '&status=sold_out', hint: '実際に売れた価格' });
+  links.push({ label: '鈴鹿市周辺の取扱店を地図で探す', url: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(searchQuery(item) + ' 取扱店 鈴鹿市'), hint: '' });
+  return links;
+}
+
+function storeMapUrl(store) {
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(store.name + ' ' + (store.address || '三重県鈴鹿市'));
+}
+
 /* ---------------- 描画 ---------------- */
 
 function $(id) { return document.getElementById(id); }
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, function (c) {
+  return String(str === null || str === undefined ? '' : str).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 }
@@ -270,10 +396,12 @@ function visibleItems() {
   var q = $('searchInput').value.trim().toLowerCase();
   var status = $('statusFilter').value;
   var sharer = $('sharerFilter').value;
+  var storeId = $('storeFilter').value;
 
   var items = allItems().filter(function (item) {
     if (status && item.status !== status) return false;
     if (sharer && sharersOf(item).indexOf(sharer) === -1) return false;
+    if (storeId && !(item.stores && item.stores[storeId] && item.stores[storeId].state === 'あり')) return false;
     if (!q) return true;
     var hay = [item.name, item.asin, item.memo, item.url, sharersOf(item).join(' '),
       item.occurrences.map(function (o) { return o.text; }).join(' ')].join(' ').toLowerCase();
@@ -285,14 +413,30 @@ function visibleItems() {
   items.sort(function (a, b) {
     var av, bv;
     if (parts[0] === 'count') { av = a.occurrences.length; bv = b.occurrences.length; }
-    else if (parts[0] === 'profit') { av = profitOf(a); bv = profitOf(b); av = av === null ? -Infinity : av; bv = bv === null ? -Infinity : bv; }
-    else if (parts[0] === 'name') { return (a.name || a.asin).localeCompare(b.name || b.asin, 'ja') * dir; }
-    else { av = firstAt(a); bv = firstAt(b); }
+    else if (parts[0] === 'found') { av = foundStores(a).length; bv = foundStores(b).length; }
+    else if (parts[0] === 'profit') {
+      av = profitOf(a); bv = profitOf(b);
+      av = av === null ? -Infinity : av; bv = bv === null ? -Infinity : bv;
+    } else if (parts[0] === 'name') {
+      return (a.name || a.asin).localeCompare(b.name || b.asin, 'ja') * dir;
+    } else { av = firstAt(a); bv = firstAt(b); }
     if (av < bv) return -1 * dir;
     if (av > bv) return 1 * dir;
     return 0;
   });
   return items;
+}
+
+function fillSelect(sel, values, placeholder) {
+  var current = sel.value;
+  sel.innerHTML = '<option value="">' + placeholder + '</option>';
+  values.forEach(function (v) {
+    var opt = document.createElement('option');
+    opt.value = v.value;
+    opt.textContent = v.label;
+    if (v.value === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
 }
 
 function renderFilters() {
@@ -307,60 +451,94 @@ function renderFilters() {
 
   var sharers = [];
   allItems().forEach(function (item) {
-    sharersOf(item).forEach(function (s) {
-      if (sharers.indexOf(s) === -1) sharers.push(s);
-    });
+    sharersOf(item).forEach(function (s) { if (sharers.indexOf(s) === -1) sharers.push(s); });
   });
   sharers.sort(function (a, b) { return a.localeCompare(b, 'ja'); });
+  fillSelect($('sharerFilter'), sharers.map(function (s) { return { value: s, label: s }; }), 'すべての共有者');
 
-  var sel = $('sharerFilter');
-  var current = sel.value;
-  sel.innerHTML = '<option value="">すべての共有者</option>';
-  sharers.forEach(function (s) {
-    var opt = document.createElement('option');
-    opt.value = opt.textContent = s;
-    if (s === current) opt.selected = true;
-    sel.appendChild(opt);
-  });
+  fillSelect($('storeFilter'), stores.map(function (s) {
+    return { value: s.id, label: s.name + 'で在庫あり' };
+  }), 'すべての店舗');
 }
 
 function renderStats(items) {
   var totalShares = items.reduce(function (sum, i) { return sum + i.occurrences.length; }, 0);
-  var sharers = {};
-  items.forEach(function (i) { sharersOf(i).forEach(function (s) { sharers[s] = true; }); });
+  var found = items.filter(function (i) { return foundStores(i).length > 0; }).length;
+  var unchecked = items.filter(function (i) { return checkedCount(i) === 0; }).length;
   var profitSum = items.reduce(function (sum, i) {
     var p = profitOf(i);
     return p === null ? sum : sum + p;
   }, 0);
-  var pending = items.filter(function (i) { return i.status === '未確認' || i.status === '検討中'; }).length;
 
   var cards = [
     { label: '商品数', value: items.length },
     { label: '共有回数', value: totalShares },
-    { label: '共有者', value: Object.keys(sharers).length + '人' },
-    { label: '未確認・検討中', value: pending },
+    { label: '店舗で発見', value: found },
+    { label: '店舗未確認', value: unchecked },
     { label: '想定利益 合計', value: '¥' + profitSum.toLocaleString('ja-JP') }
   ];
-
   $('stats').innerHTML = cards.map(function (c) {
     return '<div class="stat-card"><div class="label">' + c.label + '</div><div class="value">' + c.value + '</div></div>';
   }).join('');
 }
 
-function render() {
+function detailHtml(item) {
+  var links = researchLinks(item).map(function (l) {
+    return '<a class="research-link" href="' + escapeHtml(l.url) + '" target="_blank" rel="noopener noreferrer">'
+      + escapeHtml(l.label) + '</a>'
+      + (l.hint ? '<span class="hint">' + escapeHtml(l.hint) + '</span>' : '');
+  }).join('');
+
+  var checklist = stores.map(function (s) {
+    var e = storeEntry(item, s.id);
+    return '<div class="store-row" data-store="' + escapeHtml(s.id) + '">'
+      + '<div class="store-name">'
+      + '<a href="' + escapeHtml(storeMapUrl(s)) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.name) + '</a>'
+      + (s.address ? '<span class="hint">' + escapeHtml(s.address) + '</span>' : '')
+      + '</div>'
+      + '<select data-store-field="state" class="state-' + (e.state === 'あり' ? 'yes' : e.state === 'なし' ? 'no' : 'unknown') + '">'
+      + STOCK_STATES.map(function (st) {
+        return '<option value="' + st + '"' + (st === e.state ? ' selected' : '') + '>' + st + '</option>';
+      }).join('')
+      + '</select>'
+      + '<input type="number" data-store-field="price" value="' + escapeHtml(e.price) + '" placeholder="店頭価格">'
+      + '<input type="text" data-store-field="memo" value="' + escapeHtml(e.memo) + '" placeholder="棚・在庫数など">'
+      + '</div>';
+  }).join('');
+
+  var best = bestStorePrice(item);
+
+  return '<div class="detail">'
+    + '<div class="detail-block"><h4>リサーチ</h4><div class="research-links">' + links + '</div>'
+    + '<p class="hint">ASINから店舗在庫を自動取得することはできません。上のリンクで型番・JANを特定し、店頭またはお店の在庫検索で確認してください。</p></div>'
+    + '<div class="detail-block"><h4>店舗チェックリスト'
+    + (best === null ? '' : ' <span class="badge">最安店頭 ¥' + best.toLocaleString('ja-JP') + '</span>'
+      + ' <button class="btn btn-outline btn-sm" data-action="apply-cost">仕入値に反映</button>')
+    + '</h4>'
+    + '<div class="store-list">' + checklist + '</div></div>'
+    + '</div>';
+}
+
+function renderProductTable() {
   renderFilters();
   var items = visibleItems();
   renderStats(items);
 
-  $('emptyState').style.display = allItems().length === 0 ? 'block' : 'none';
-  if (allItems().length > 0 && items.length === 0) {
-    $('emptyState').style.display = 'block';
-    $('emptyState').textContent = '条件に一致する商品がありません。';
-  } else if (allItems().length > 0) {
-    $('emptyState').textContent = '';
+  var empty = $('emptyState');
+  if (allItems().length === 0) {
+    empty.style.display = 'block';
+    empty.textContent = 'まだ商品がありません。上のフォームからASINを貼り付けてください。';
+  } else if (items.length === 0) {
+    empty.style.display = 'block';
+    empty.textContent = '条件に一致する商品がありません。';
   } else {
-    $('emptyState').textContent = 'まだ商品がありません。上のフォームからトーク履歴を取り込んでください。';
+    empty.style.display = 'none';
   }
+
+  var openKeys = {};
+  Array.prototype.forEach.call(document.querySelectorAll('#tableBody tr.detail-row'), function (tr) {
+    openKeys[tr.getAttribute('data-key')] = true;
+  });
 
   $('tableBody').innerHTML = items.map(function (item) {
     var profit = profitOf(item);
@@ -369,21 +547,30 @@ function render() {
       ? '<span class="muted">-</span>'
       : '<span class="' + (profit >= 0 ? 'profit-plus' : 'profit-minus') + '">¥' + profit.toLocaleString('ja-JP') + '</span>'
         + (margin === null ? '' : '<br><span class="muted">' + margin + '%</span>');
-    var snippet = item.occurrences.length
-      ? item.occurrences[0].text.replace(URL_RE, '').replace(/\s+/g, ' ').trim()
-      : '';
     var at = firstAt(item);
+    var snippet = item.occurrences.length
+      ? item.occurrences[0].text.replace(URL_RE, '').replace(/\s+/g, ' ').trim() : '';
+    URL_RE.lastIndex = 0;
+    var found = foundStores(item);
+    var open = openKeys[item.key];
 
-    return '<tr data-key="' + escapeHtml(item.key) + '">'
+    var row = '<tr data-key="' + escapeHtml(item.key) + '">'
       + '<td class="col-name">'
       + '<input type="text" data-field="name" value="' + escapeHtml(item.name) + '" placeholder="商品名を入力">'
       + '<a class="product-link" href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(item.url) + '</a>'
-      + '<span class="snippet">' + escapeHtml(snippet) + '</span>'
+      + (snippet ? '<span class="snippet">' + escapeHtml(snippet) + '</span>' : '')
       + '</td>'
       + '<td class="col-asin"><span class="asin-code">' + (item.asin ? escapeHtml(item.asin) : '<span class="muted">短縮URL</span>') + '</span></td>'
       + '<td class="col-sharer">' + escapeHtml(sharersOf(item).join(', ')) + '</td>'
       + '<td class="col-date">' + (at ? escapeHtml(at.slice(0, 10)) + '<br><span class="muted">' + escapeHtml(at.slice(11)) + '</span>' : '-') + '</td>'
       + '<td class="col-count">' + item.occurrences.length + '</td>'
+      + '<td class="col-store">'
+      + '<button class="btn btn-outline btn-sm" data-action="toggle">' + (open ? '閉じる' : '店舗') + '</button>'
+      + '<div class="store-summary">'
+      + (found.length
+        ? '<span class="badge badge-yes">' + found.length + '店舗であり</span>'
+        : '<span class="muted">' + (checkedCount(item) ? '未発見' : '未確認') + '</span>')
+      + '</div></td>'
       + '<td class="col-money"><input type="number" data-field="cost" value="' + escapeHtml(item.cost) + '" placeholder="0"></td>'
       + '<td class="col-money"><input type="number" data-field="price" value="' + escapeHtml(item.price) + '" placeholder="0"></td>'
       + '<td class="col-profit">' + profitCell + '</td>'
@@ -395,26 +582,89 @@ function render() {
       + '<td class="col-memo"><input type="text" data-field="memo" value="' + escapeHtml(item.memo) + '" placeholder="メモ"></td>'
       + '<td class="col-actions"><button class="icon-btn" data-action="delete" title="削除">×</button></td>'
       + '</tr>';
+
+    if (open) {
+      row += '<tr class="detail-row" data-key="' + escapeHtml(item.key) + '"><td colspan="12">' + detailHtml(item) + '</td></tr>';
+    }
+    return row;
   }).join('');
+}
+
+function renderStoreView() {
+  var html = stores.map(function (s) {
+    var items = allItems().filter(function (item) {
+      return item.stores && item.stores[s.id] && item.stores[s.id].state === 'あり';
+    });
+    if (items.length === 0) return '';
+
+    var rows = items.map(function (item) {
+      var e = item.stores[s.id];
+      var profit = profitOf(item);
+      return '<tr>'
+        + '<td><a href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener noreferrer">'
+        + escapeHtml(item.name || item.asin) + '</a>'
+        + '<span class="hint">' + escapeHtml(item.asin) + '</span></td>'
+        + '<td class="col-money">' + (e.price === '' ? '-' : '¥' + Number(e.price).toLocaleString('ja-JP')) + '</td>'
+        + '<td class="col-money">' + (item.price === '' ? '-' : '¥' + Number(item.price).toLocaleString('ja-JP')) + '</td>'
+        + '<td class="col-profit">' + (profit === null ? '-'
+          : '<span class="' + (profit >= 0 ? 'profit-plus' : 'profit-minus') + '">¥' + profit.toLocaleString('ja-JP') + '</span>') + '</td>'
+        + '<td>' + escapeHtml(item.status) + '</td>'
+        + '<td>' + escapeHtml(e.memo) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    return '<div class="store-block">'
+      + '<h3><a href="' + escapeHtml(storeMapUrl(s)) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.name) + '</a>'
+      + ' <span class="badge badge-yes">' + items.length + '点</span></h3>'
+      + (s.address ? '<p class="hint">' + escapeHtml(s.address) + '</p>' : '')
+      + '<div class="table-scroll"><table class="store-table"><thead><tr>'
+      + '<th>商品</th><th class="col-money">店頭価格</th><th class="col-money">売値</th>'
+      + '<th class="col-profit">想定利益</th><th>ステータス</th><th>メモ</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+  }).join('');
+
+  $('storeViewBody').innerHTML = html
+    || '<p class="empty">「あり」と記録された商品がまだありません。商品別ビューの「店舗」ボタンから店舗チェックリストを開いて記録してください。</p>';
+}
+
+function renderStoreMaster() {
+  $('storeCount').textContent = stores.length + '店舗';
+  $('storeMasterList').innerHTML = stores.map(function (s) {
+    return '<li data-store="' + escapeHtml(s.id) + '">'
+      + '<a href="' + escapeHtml(storeMapUrl(s)) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.name) + '</a>'
+      + (s.address ? '<span class="hint">' + escapeHtml(s.address) + '</span>' : '')
+      + (s.note ? '<span class="tag">' + escapeHtml(s.note) + '</span>' : '')
+      + '<button class="icon-btn" data-action="delete-store" title="削除">×</button>'
+      + '</li>';
+  }).join('');
+}
+
+function render() {
+  renderStoreMaster();
+  if (currentView === 'product') renderProductTable();
+  else { renderFilters(); renderStats(allItems()); renderStoreView(); }
 }
 
 /* ---------------- CSV ---------------- */
 
 function csvCell(value) {
-  var s = value === null || value === undefined ? '' : String(value);
-  return '"' + s.replace(/"/g, '""') + '"';
+  return '"' + String(value === null || value === undefined ? '' : value).replace(/"/g, '""') + '"';
 }
 
 function exportCsv() {
-  var header = ['商品名', 'ASIN', 'URL', '共有者', '初回共有日時', '共有回数', '仕入値', '売値', '想定利益', '利益率(%)', 'ステータス', 'メモ', '元メッセージ'];
-  var rows = visibleItems().map(function (item) {
+  var header = ['商品名', 'ASIN', 'URL', '共有者', '初回共有日時', '共有回数', '在庫あり店舗', '最安店頭価格',
+    '仕入値', '売値', '想定利益', '利益率(%)', 'ステータス', 'メモ'];
+  var items = currentView === 'product' ? visibleItems() : allItems();
+  var rows = items.map(function (item) {
+    var best = bestStorePrice(item);
     return [
-      item.name, item.asin, item.url, sharersOf(item).join(' / '), firstAt(item),
-      item.occurrences.length, item.cost, item.price,
+      item.name, item.asin, item.url, sharersOf(item).join(' / '), firstAt(item), item.occurrences.length,
+      foundStores(item).map(function (s) { return s.name; }).join(' / '),
+      best === null ? '' : best,
+      item.cost, item.price,
       profitOf(item) === null ? '' : profitOf(item),
       marginOf(item) === null ? '' : marginOf(item),
-      item.status, item.memo,
-      item.occurrences.length ? item.occurrences[0].text.replace(/\s+/g, ' ') : ''
+      item.status, item.memo
     ].map(csvCell).join(',');
   });
 
@@ -433,10 +683,9 @@ function exportCsv() {
 /* ---------------- イベント ---------------- */
 
 function reportImport(result) {
-  var msg = result.occurrences === 0
-    ? 'Amazonのリンクが見つかりませんでした。'
+  $('importResult').textContent = result.occurrences === 0
+    ? 'ASIN／Amazonリンクが見つかりませんでした。'
     : '新規 ' + result.added + '件 / 共有 ' + result.occurrences + '件を取り込みました。';
-  $('importResult').textContent = msg;
   save();
   render();
 }
@@ -445,7 +694,6 @@ function readFiles(files) {
   var pending = files.length;
   var total = { added: 0, occurrences: 0 };
   if (!pending) return;
-
   Array.prototype.forEach.call(files, function (file) {
     var reader = new FileReader();
     reader.onload = function () {
@@ -454,15 +702,49 @@ function readFiles(files) {
       total.occurrences += r.occurrences;
       if (--pending === 0) reportImport(total);
     };
-    reader.onerror = function () {
-      if (--pending === 0) reportImport(total);
-    };
+    reader.onerror = function () { if (--pending === 0) reportImport(total); };
     reader.readAsText(file, 'utf-8');
   });
 }
 
+function switchView(view) {
+  currentView = view;
+  $('productView').hidden = view !== 'product';
+  $('storeView').hidden = view !== 'store';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (b) {
+    b.classList.toggle('is-active', b.getAttribute('data-view') === view);
+  });
+  render();
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   $('feeRate').value = settings.feeRate;
+
+  Array.prototype.forEach.call(document.querySelectorAll('#importTabs .tab'), function (tab) {
+    tab.addEventListener('click', function () {
+      var name = tab.getAttribute('data-tab');
+      Array.prototype.forEach.call(document.querySelectorAll('#importTabs .tab'), function (t) {
+        t.classList.toggle('is-active', t === tab);
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-body]'), function (b) {
+        b.hidden = b.getAttribute('data-body') !== name;
+      });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (b) {
+    b.addEventListener('click', function () { switchView(b.getAttribute('data-view')); });
+  });
+
+  $('asinImportBtn').addEventListener('click', function () {
+    var text = $('asinArea').value;
+    if (!text.trim()) {
+      $('importResult').textContent = 'ASINを貼り付けてください。';
+      return;
+    }
+    reportImport(importAsinList(text, $('asinSharer').value.trim() || '共有'));
+    $('asinArea').value = '';
+  });
 
   $('importBtn').addEventListener('click', function () {
     var text = $('pasteArea').value;
@@ -490,24 +772,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (e.dataTransfer && e.dataTransfer.files) readFiles(e.dataTransfer.files);
   });
 
-  $('manualAddBtn').addEventListener('click', function () {
-    var url = $('manualUrl').value.trim();
-    if (!url) return;
-    if (!isAmazonUrl(url)) {
-      $('importResult').textContent = 'AmazonのURLを入力してください。';
-      return;
-    }
-    var sharer = $('manualSharer').value.trim() || '手動追加';
-    var now = new Date();
-    var at = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
-      + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
-    reportImport(importMessages([{ at: at, sharer: sharer, text: url }]));
-    $('manualUrl').value = '';
-  });
-
-  ['searchInput', 'statusFilter', 'sharerFilter', 'sortSelect'].forEach(function (id) {
-    $(id).addEventListener('input', render);
-    $(id).addEventListener('change', render);
+  ['searchInput', 'statusFilter', 'sharerFilter', 'storeFilter', 'sortSelect'].forEach(function (id) {
+    $(id).addEventListener('input', renderProductTable);
+    $(id).addEventListener('change', renderProductTable);
   });
 
   $('feeRate').addEventListener('change', function () {
@@ -519,8 +786,34 @@ document.addEventListener('DOMContentLoaded', function () {
   $('csvBtn').addEventListener('click', exportCsv);
 
   $('clearBtn').addEventListener('click', function () {
-    if (!confirm('保存しているすべての商品を削除します。よろしいですか？')) return;
+    if (!confirm('保存しているすべての商品を削除します。よろしいですか？（店舗マスタは残ります）')) return;
     products = {};
+    save();
+    render();
+  });
+
+  $('addStoreBtn').addEventListener('click', function () {
+    var name = $('newStoreName').value.trim();
+    if (!name) return;
+    stores.push({
+      id: 'custom-' + Date.now(),
+      name: name,
+      address: $('newStoreAddress').value.trim(),
+      note: ''
+    });
+    $('newStoreName').value = '';
+    $('newStoreAddress').value = '';
+    save();
+    render();
+  });
+
+  $('storeMasterList').addEventListener('click', function (e) {
+    if (e.target.getAttribute('data-action') !== 'delete-store') return;
+    var id = e.target.closest('li').getAttribute('data-store');
+    var store = stores.filter(function (s) { return s.id === id; })[0];
+    if (!store || !confirm('「' + store.name + '」を店舗マスタから削除しますか？')) return;
+    stores = stores.filter(function (s) { return s.id !== id; });
+    allItems().forEach(function (item) { if (item.stores) delete item.stores[id]; });
     save();
     render();
   });
@@ -528,24 +821,65 @@ document.addEventListener('DOMContentLoaded', function () {
   var tbody = $('tableBody');
 
   tbody.addEventListener('change', function (e) {
+    var item = products[e.target.closest('tr').getAttribute('data-key')];
+    if (!item) return;
+
+    var storeField = e.target.getAttribute('data-store-field');
+    if (storeField) {
+      var storeId = e.target.closest('.store-row').getAttribute('data-store');
+      var entry = storeEntry(item, storeId);
+      entry[storeField] = storeField === 'price' ? toNumber(e.target.value) : e.target.value;
+      save();
+      renderProductTable();
+      return;
+    }
+
     var field = e.target.getAttribute('data-field');
     if (!field) return;
-    var row = e.target.closest('tr');
-    var item = products[row.getAttribute('data-key')];
-    if (!item) return;
     item[field] = (field === 'cost' || field === 'price') ? toNumber(e.target.value) : e.target.value;
     save();
-    if (field === 'cost' || field === 'price' || field === 'status') render();
+    if (field === 'cost' || field === 'price' || field === 'status') renderProductTable();
   });
 
   tbody.addEventListener('click', function (e) {
-    if (e.target.getAttribute('data-action') !== 'delete') return;
+    var action = e.target.getAttribute('data-action');
+    if (!action) return;
     var row = e.target.closest('tr');
     var key = row.getAttribute('data-key');
-    if (!confirm('この商品を削除しますか？')) return;
-    delete products[key];
-    save();
-    render();
+    var item = products[key];
+
+    if (action === 'toggle') {
+      var detail = document.querySelector('#tableBody tr.detail-row[data-key="' + key.replace(/"/g, '\\"') + '"]');
+      if (detail) {
+        detail.remove();
+        e.target.textContent = '店舗';
+      } else {
+        var tr = document.createElement('tr');
+        tr.className = 'detail-row';
+        tr.setAttribute('data-key', key);
+        tr.innerHTML = '<td colspan="12">' + detailHtml(item) + '</td>';
+        row.parentNode.insertBefore(tr, row.nextSibling);
+        e.target.textContent = '閉じる';
+      }
+      return;
+    }
+
+    if (action === 'apply-cost') {
+      var best = bestStorePrice(item);
+      if (best !== null) {
+        item.cost = best;
+        save();
+        renderProductTable();
+      }
+      return;
+    }
+
+    if (action === 'delete') {
+      if (!confirm('この商品を削除しますか？')) return;
+      delete products[key];
+      save();
+      renderProductTable();
+    }
   });
 
   render();
