@@ -211,14 +211,20 @@ function extractJan(text) {
   return m ? m[1] : '';
 }
 
-function guessName(text, token) {
+// URL・ASIN・JANを取り除いて商品名の候補を作る
+function cleanName(text, token) {
   var cleaned = text.split(token).join(' ').replace(URL_RE, ' ').replace(BARE_ASIN, ' ')
     .replace(/JAN\s*[:：]?\s*\d{13}/gi, ' ').replace(/(?:^|[^0-9])\d{13}(?![0-9])/g, ' ')
     .replace(/[（(][\s、,／\/]*[)）]/g, ' ')
     .replace(/\s+/g, ' ').trim();
   URL_RE.lastIndex = 0;
   BARE_ASIN.lastIndex = 0;
-  if (!cleaned) return '';
+  return cleaned;
+}
+
+// トーク本文から推測する場合だけ、長すぎる本文を切り詰める
+function guessName(text, token) {
+  var cleaned = cleanName(text, token);
   return cleaned.length > 60 ? cleaned.slice(0, 60) + '…' : cleaned;
 }
 
@@ -319,7 +325,7 @@ function importAsinList(text, sharer) {
       messages.push({
         at: at, sharer: sharer,
         text: m[1].toUpperCase() + ' ' + m[2],
-        name: guessName(m[2], m[1])
+        name: cleanName(m[2], m[1])
       });
     } else {
       messages.push({ at: at, sharer: sharer, text: raw });
