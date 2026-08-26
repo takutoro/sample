@@ -461,3 +461,17 @@ code {
   .store-row { grid-template-columns: 1fr 1fr; }
   .store-row .store-name { grid-column: 1 / -1; }
 }
+
+.jan-field {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.jan-field input {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  font-family: "SF Mono", Consolas, monospace;
+}
