@@ -67,6 +67,21 @@ window.SHARED_LIST = {
         { id: 'sugi-sumiyoshi', state: '未確認', memo: '次点：日用品売場' },
         { id: 'mega-donki-uny', state: '未確認', memo: '次点：日用品売場' }
       ]
+    },
+    {
+      asin: 'B00U8M4VT6',
+      name: '【医薬部外品】ニキビ 洗顔 クレアラシル 薬用洗顔フォーム しっかりタイプ120g×2',
+      jan: '',
+      sharedAt: '2026-08-26 00:00',
+      memo: 'レキットベンキーザー・ジャパン／医薬部外品（販売に許可・届出は不要）。単品120gの店頭価格は税込492円前後、単品JANは4906156100327。このASINは「×2」セットのため単品JANとは別物。メーカー梱包の2個パックかどうか要確認（単品2個を自作セットで出品するのは規約リスク）',
+      stores: [
+        { id: 'sugi-sumiyoshi', state: '未確認', memo: '★最優先：ドラッグストア スキンケア売場' },
+        { id: 'aoki-sumiyoshi', state: '未確認', memo: '★最優先：ドラッグストア スキンケア売場' },
+        { id: 'aoki-sanjo', state: '未確認', memo: '★最優先：ドラッグストア スキンケア売場' },
+        { id: 'aeonmall-suzuka', state: '未確認', memo: '次点：日用品・化粧品売場' },
+        { id: 'aeon-suzuka', state: '未確認', memo: '次点：日用品・化粧品売場' },
+        { id: 'mega-donki-uny', state: '未確認', memo: '次点：化粧品売場' }
+      ]
     }
   ]
 };
