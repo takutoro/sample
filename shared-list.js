@@ -82,6 +82,24 @@ window.SHARED_LIST = {
         { id: 'aeon-suzuka', state: '未確認', memo: '次点：日用品・化粧品売場' },
         { id: 'mega-donki-uny', state: '未確認', memo: '次点：化粧品売場' }
       ]
+    },
+    {
+      asin: 'B09T3B97T1',
+      name: '【NEW】ライオン デント チェックアップ スタンダード 135g (135g 2本)',
+      jan: '',
+      sharedAt: '2026-09-02 00:00',
+      memo: 'ライオン歯科材／フッ素1450ppm・医薬部外品（販売に許可・届出は不要）。Amazon約1,220円（2本）。歯科医院で最も採用されている製品だが、ドラッグストア・ドンキ・ロフト/ハンズでも取扱いあり。単品135gの実売は数百円台のため2本だと利幅が薄い見込み、Keepaで要確認。「×2」がメーカー梱包セットかも要確認（単品JANの流用は不可）',
+      stores: [
+        { id: 'loft-suzuka', state: '未確認', memo: '★最優先：ロフトは取扱いチェーン。2024年7月開店で県内初' },
+        { id: 'welcia-sakurajima', state: '未確認', memo: '★優先：ドラッグストア オーラルケア売場' },
+        { id: 'welcia-shimomikita', state: '未確認', memo: '★優先：ドラッグストア オーラルケア売場' },
+        { id: 'sugi-sumiyoshi', state: '未確認', memo: '★優先：スギ薬局は取扱いチェーン' },
+        { id: 'aoki-sumiyoshi', state: '未確認', memo: '優先：ドラッグストア オーラルケア売場' },
+        { id: 'aoki-sanjo', state: '未確認', memo: '優先：ドラッグストア オーラルケア売場' },
+        { id: 'mega-donki-uny', state: '未確認', memo: '次点：ドンキは取扱いチェーン' },
+        { id: 'donki-suzuka', state: '未確認', memo: '次点：ドンキは取扱いチェーン' },
+        { id: 'hands-yokkaichi', state: '未確認', memo: '市外（四日市）。ハンズは取扱いチェーン' }
+      ]
     }
   ]
 };

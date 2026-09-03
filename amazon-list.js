@@ -37,10 +37,14 @@ var DEFAULT_STORES = [
   { id: 'valor-suzuka', name: 'ホームセンターバロー 鈴鹿店（ペット大好き併設）', address: '鈴鹿市東旭が丘', note: 'ホームセンター・ペット' },
   { id: 'aoki-sumiyoshi', name: 'クスリのアオキ 鈴鹿住吉店', address: '', note: 'ドラッグストア' },
   { id: 'aoki-sanjo', name: 'クスリのアオキ 算所店', address: '', note: 'ドラッグストア' },
-  { id: 'sugi-sumiyoshi', name: 'スギ薬局 鈴鹿住吉店', address: '鈴鹿市住吉3-20-1', note: 'ドラッグストア' }
+  { id: 'sugi-sumiyoshi', name: 'スギ薬局 鈴鹿住吉店', address: '鈴鹿市住吉3-20-1', note: 'ドラッグストア' },
+  { id: 'loft-suzuka', name: '鈴鹿ロフト（イオンモール鈴鹿1F）', address: '鈴鹿市庄野羽山4-1-2', note: 'バラエティ・10:00-21:00' },
+  { id: 'welcia-sakurajima', name: 'ウエルシア 鈴鹿桜島店', address: '', note: 'ドラッグストア' },
+  { id: 'welcia-shimomikita', name: 'ウエルシア薬局 鈴鹿下箕田店', address: '', note: 'ドラッグストア' },
+  { id: 'hands-yokkaichi', name: 'ハンズ 四日市店（近鉄百貨店四日市店2F）', address: '四日市市', note: 'バラエティ・市外' }
 ];
 
-var STORE_VERSION = 2;
+var STORE_VERSION = 3;
 
 var AMAZON_HOST = /(^|\.)(amazon\.(co\.jp|com|co\.uk|de|fr|it|es|ca|com\.mx|com\.au|in|nl|se|pl|com\.tr|sg|ae|sa|com\.br)|amzn\.asia|amzn\.to|a\.co)$/i;
 var ASIN_PATTERNS = [
