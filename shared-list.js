@@ -9,7 +9,7 @@
  * ------------------------------------------------------------------ */
 
 window.SHARED_LIST = {
-  updated: '2026-09-02',
+  updated: '2026-09-09',
   items: [
     {
       asin: 'B0CVKSCNN9',
@@ -99,6 +99,24 @@ window.SHARED_LIST = {
         { id: 'mega-donki-uny', state: '未確認', memo: '次点：ドンキは取扱いチェーン' },
         { id: 'donki-suzuka', state: '未確認', memo: '次点：ドンキは取扱いチェーン' },
         { id: 'hands-yokkaichi', state: '未確認', memo: '市外（四日市）。ハンズは取扱いチェーン' }
+      ]
+    },
+    {
+      asin: 'B0CTSDD9H7',
+      name: 'アクアシャボン ハンドクリーム (24s) サクラフローラルの香り 45g',
+      jan: '',
+      sharedAt: '2026-09-09 00:00',
+      status: '監視中',
+      reviewAt: '2026-09-16',
+      memo: '【監視対象】ウエニ貿易／定価990円（税込）・45g。化粧品のため販売に許可・届出は不要。「(24s)」は2024年春の季節限定品とみられ、終売でプレミア化している可能性あり。2026-09-16に相場と在庫を再確認する。JANは未確認',
+      stores: [
+        { id: 'loft-suzuka', state: '未確認', memo: '★最優先：ロフトはアクアシャボンの取扱いチェーン' },
+        { id: 'hands-yokkaichi', state: '未確認', memo: '★優先：ハンズも取扱いチェーン（四日市・市外）' },
+        { id: 'welcia-sakurajima', state: '未確認', memo: 'ドラッグストア ハンドクリーム売場' },
+        { id: 'welcia-shimomikita', state: '未確認', memo: 'ドラッグストア ハンドクリーム売場' },
+        { id: 'sugi-sumiyoshi', state: '未確認', memo: 'ドラッグストア ハンドクリーム売場' },
+        { id: 'mega-donki-uny', state: '未確認', memo: '次点：季節品の処分ワゴンを確認' },
+        { id: 'aeonmall-suzuka', state: '未確認', memo: '次点：バラエティ・化粧品売場' }
       ]
     }
   ]

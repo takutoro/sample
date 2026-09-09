@@ -475,3 +475,19 @@ code {
   margin-top: 3px;
   font-family: "SF Mono", Consolas, monospace;
 }
+
+.review-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background-color: rgba(15, 108, 189, 0.12);
+  color: var(--link);
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.review-badge.is-due {
+  background-color: rgba(214, 69, 69, 0.15);
+  color: var(--danger);
+}

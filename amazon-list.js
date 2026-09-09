@@ -10,7 +10,7 @@ var STORAGE_KEY = 'amazonProductList.v1';
 var SETTING_KEY = 'amazonProductList.settings.v1';
 var STORE_KEY = 'amazonProductList.stores.v1';
 
-var STATUSES = ['未確認', '検討中', '仕入済', '出品済', '見送り'];
+var STATUSES = ['未確認', '監視中', '検討中', '仕入済', '出品済', '見送り'];
 var STOCK_STATES = ['未確認', 'あり', 'なし'];
 
 /* 鈴鹿市周辺の店舗（公開情報を元にした初期値。ユーザーが編集・追加できる） */
@@ -105,6 +105,16 @@ var MSG_TAB = /^(?:(午前|午後)\s*)?(\d{1,2}):(\d{2})\t([^\t]*)\t([\s\S]*)$/;
 var MSG_SPACE = /^(?:(午前|午後)\s*)?(\d{1,2}):(\d{2})[ 　]+(\S+)[ 　]+([\s\S]*)$/;
 
 function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+// 次回確認日が今日以前なら「要確認」
+function isDue(item) {
+  return !!item.reviewAt && item.reviewAt <= todayStr();
+}
 
 function nowStamp() {
   var d = new Date();
@@ -261,6 +271,7 @@ function upsert(key, asin, url, msg, nameOverride) {
       status: STATUSES[0],
       memo: '',
       jan: extractJan(msg.text),
+      reviewAt: '',
       stores: {},
       occurrences: []
     };
@@ -331,6 +342,9 @@ function importSharedList() {
     if (entry.name && !item.name) item.name = entry.name;
     if (entry.jan && !item.jan) item.jan = entry.jan;
     if (entry.memo && !item.memo) item.memo = entry.memo;
+    // ステータスと確認日は、自分で動かしていない場合だけ共有側の値を入れる
+    if (entry.status && item.status === STATUSES[0]) item.status = entry.status;
+    if (entry.reviewAt && !item.reviewAt) item.reviewAt = entry.reviewAt;
 
     (entry.stores || []).forEach(function (s) {
       if (!s.id) return;
@@ -507,6 +521,7 @@ function visibleItems() {
     var av, bv;
     if (parts[0] === 'count') { av = a.occurrences.length; bv = b.occurrences.length; }
     else if (parts[0] === 'found') { av = foundStores(a).length; bv = foundStores(b).length; }
+    else if (parts[0] === 'review') { av = a.reviewAt || '9999-99-99'; bv = b.reviewAt || '9999-99-99'; }
     else if (parts[0] === 'profit') {
       av = profitOf(a); bv = profitOf(b);
       av = av === null ? -Infinity : av; bv = bv === null ? -Infinity : bv;
@@ -563,11 +578,14 @@ function renderStats(items) {
     return p === null ? sum : sum + p;
   }, 0);
 
+  var due = items.filter(isDue).length;
+  var watching = items.filter(function (i) { return i.status === '監視中'; }).length;
+
   var cards = [
     { label: '商品数', value: items.length },
-    { label: '共有回数', value: totalShares },
+    { label: '監視中', value: watching },
+    { label: '要確認（期限到来）', value: due },
     { label: '店舗で発見', value: found },
-    { label: '店舗未確認', value: unchecked },
     { label: '想定利益 合計', value: '¥' + profitSum.toLocaleString('ja-JP') }
   ];
   $('stats').innerHTML = cards.map(function (c) {
@@ -605,6 +623,9 @@ function detailHtml(item) {
     + '<div class="detail-block"><h4>リサーチ</h4>'
     + '<label class="jan-field">JANコード'
     + '<input type="text" data-field="jan" value="' + escapeHtml(item.jan || '') + '" placeholder="4520699688045">'
+    + '</label>'
+    + '<label class="jan-field">次回確認日'
+    + '<input type="date" data-field="reviewAt" value="' + escapeHtml(item.reviewAt || '') + '">'
     + '</label>'
     + '<div class="research-links">' + links + '</div>'
     + '<p class="hint">ASINから店舗在庫を自動取得することはできません。上のリンクで型番・JANを特定し、店頭またはお店の在庫検索で確認してください。</p></div>'
@@ -655,6 +676,10 @@ function renderProductTable() {
       + '<td class="col-name">'
       + '<input type="text" data-field="name" value="' + escapeHtml(item.name) + '" placeholder="商品名を入力">'
       + '<a class="product-link" href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(item.url) + '</a>'
+      + (item.reviewAt
+        ? '<span class="review-badge' + (isDue(item) ? ' is-due' : '') + '">確認予定 '
+          + escapeHtml(item.reviewAt.slice(5).replace('-', '/')) + (isDue(item) ? '（期限到来）' : '') + '</span>'
+        : '')
       + (snippet ? '<span class="snippet">' + escapeHtml(snippet) + '</span>' : '')
       + '</td>'
       + '<td class="col-asin"><span class="asin-code">' + (item.asin ? escapeHtml(item.asin) : '<span class="muted">短縮URL</span>') + '</span></td>'
@@ -750,7 +775,7 @@ function csvCell(value) {
 
 function exportCsv() {
   var header = ['商品名', 'ASIN', 'JAN', 'URL', '共有者', '初回共有日時', '共有回数', '在庫あり店舗', '最安店頭価格',
-    '仕入値', '売値', '想定利益', '利益率(%)', 'ステータス', 'メモ'];
+    '仕入値', '売値', '想定利益', '利益率(%)', 'ステータス', '次回確認日', 'メモ'];
   var items = currentView === 'product' ? visibleItems() : allItems();
   var rows = items.map(function (item) {
     var best = bestStorePrice(item);
@@ -761,7 +786,7 @@ function exportCsv() {
       item.cost, item.price,
       profitOf(item) === null ? '' : profitOf(item),
       marginOf(item) === null ? '' : marginOf(item),
-      item.status, item.memo
+      item.status, item.reviewAt || '', item.memo
     ].map(csvCell).join(',');
   });
 
@@ -957,7 +982,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!field) return;
     item[field] = (field === 'cost' || field === 'price') ? toNumber(e.target.value) : e.target.value;
     save();
-    if (field === 'cost' || field === 'price' || field === 'status' || field === 'jan') renderProductTable();
+    if (['cost', 'price', 'status', 'jan', 'reviewAt'].indexOf(field) !== -1) renderProductTable();
   });
 
   tbody.addEventListener('click', function (e) {
